@@ -1,6 +1,6 @@
 const request = require('request')
 const queue = require('d3-queue').queue
-const q = queue(1)
+const q = queue(20)
 
 // fetch all projects
 var options = {
