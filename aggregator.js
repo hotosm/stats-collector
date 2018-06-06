@@ -1,28 +1,28 @@
 const request = require('request')
 const turf = require('turf')
 const queue = require('d3-queue').queue
-const q = queue(20)
+const q = queue(25)
 
 var aggregatedData = {}
-
-// fetch all projects
-
 var options = {
   headers: {
     'Accept': 'application/json',
     'Accept-Language': 'en'
   }
 }
-options.url = 'https://tasks.hotosm.org/api/v1/stats/home-page'
 
+// fetch home-stats
+options.url = 'https://tasks.hotosm.org/api/v1/stats/home-page'
 request(options, function (error, response, body) {
   if (!error && response.statusCode === 200) {
     var data = JSON.parse(body)
     aggregatedData['mappersOnline'] = data['mappersOnline']
-    aggregatedData['totalTasksMapped'] = data['totalTasksMapped']
+    aggregatedData['totalTasksMapped'] = data['tasksMapped']
     aggregatedData['totalMappers'] = data['totalMappers']
   }
 })
+
+// fetch all projects
 options.url = 'https://tasks.hotosm.org/api/v1/project/search'
 request(options, function (error, response, body) {
   if (!error && response.statusCode === 200) {
