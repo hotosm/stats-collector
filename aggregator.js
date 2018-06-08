@@ -1,10 +1,15 @@
 const request = require('request')
 const turf = require('turf')
 const queue = require('d3-queue').queue
-const q = queue(100)
 const fs = require('fs')
+const moment = require('moment')
+const q = queue(100)
 const adminBoundaries = require('./countries.json')
 var aggregatedData = {}
+var lastActive = {
+  "type": "FeatureCollection",
+  "features": []
+}
 var options = {
   headers: {
     'Accept': 'application/json',
@@ -51,9 +56,19 @@ request(options, function (error, response, body) {
           'type': 'Feature',
           'properties': {}
         }
+        var projectCentroid = turf.centroid(project['areaOfInterest'])
+        console.log('projectCentroid of ' + project.projectId + ' ' + JSON.stringify(projectCentroid))
+        var currentTime = moment().format('YYYY-MM-DD[T]HH:mm:ss')
+        currentTime = moment(currentTime).utc()
+        var projectTime = moment.utc(project['lastUpdated'])
+        var diff = currentTime.diff(projectTime, 'hours')
+        if (diff <= 120) {
+          projectCentroid.properties['title'] = project.projectInfo['name']
+          projectCentroid.properties['id'] = project.projectId
+          lastActive.features.push(projectCentroid)
+        }
         feature['geometry'] = project['areaOfInterest']
         area = area + turf.area(feature) / 1000000
-        var projectCentroid = turf.centroid(feature['geometry'])
         adminBoundaries.features.forEach(boundary => {
           isInside = turf.inside(projectCentroid, boundary)
           if (isInside) {
@@ -69,8 +84,11 @@ request(options, function (error, response, body) {
       aggregatedData['totalArea'] = area
       fs.writeFileSync('aggregatedStats.json', JSON.stringify(aggregatedData), function (err) {
         if (err) throw err
-        console.log('Saved!')
         aggregatedData = {}
+      })
+      fs.writeFileSync('lastActive.json', JSON.stringify(lastActive), function (err) {
+        if (err) throw err
+        lastActive = {}
       })
     })
   } else {
