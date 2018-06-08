@@ -7,8 +7,8 @@ const q = queue(100)
 const adminBoundaries = require('./countries.json')
 var aggregatedData = {}
 var lastActive = {
-  "type": "FeatureCollection",
-  "features": []
+  'type': 'FeatureCollection',
+  'features': []
 }
 var options = {
   headers: {
@@ -48,7 +48,7 @@ request(options, function (error, response, body) {
       console.log(results.length)
       aggregatedData['totalProjects'] = results.length
       var area = 0
-
+      var count = 0
       results.forEach(project => {
         project = JSON.parse(project)
         var isInside = false
@@ -68,27 +68,54 @@ request(options, function (error, response, body) {
           lastActive.features.push(projectCentroid)
         }
         feature['geometry'] = project['areaOfInterest']
-        area = area + turf.area(feature) / 1000000
-        adminBoundaries.features.forEach(boundary => {
-          isInside = turf.inside(projectCentroid, boundary)
-          if (isInside) {
-            if (!aggregatedData[boundary.properties['NAME_EN']]) {
-              aggregatedData[boundary.properties['NAME_EN']] = []
-              aggregatedData[boundary.properties['NAME_EN']].push(project.projectId)
-            } else {
-              aggregatedData[boundary.properties['NAME_EN']].push(project.projectId)
-            }
+        var projectArea = turf.area(feature) / 1000000
+        area = area + projectArea
+        feature['geometry'] = projectCentroid.geometry
+        feature.properties['title'] = project.projectInfo['name']
+        feature.properties['id'] = project.projectId
+        feature.properties['area'] = projectArea
+        feature.properties['year'] = project['lastUpdated'].slice(0, 4)
+        feature.properties['lastUpdated'] = project['lastUpdated']
+        var hashtag = project['changesetComment'].split(' ')[0].slice(1)
+        console.log(hashtag)
+        options.url = 'https://osm-stats-production-api.azurewebsites.net/stats/' + hashtag
+        request(options, function (error, response, body) {
+          console.log('Error: ', error)
+          console.log('response: ', JSON.stringify(response))
+          console.log('body: ', body)
+          if (!error) {
+            var projectStats = JSON.parse(body)
+            count++
+            console.log(projectStats)
+            feature.properties['changesets'] = projectStats.changesets
+            feature.properties['mappers'] = projectStats.users
+            feature.properties['roads'] = projectStats.roads
+            feature.properties['buildings'] = projectStats.buildings
+            feature.properties['edits'] = projectStats.edits
+            feature.properties['latest'] = projectStats.latest
           }
+          adminBoundaries.features.forEach(boundary => {
+            isInside = turf.inside(projectCentroid, boundary)
+            if (isInside) {
+              if (!aggregatedData[boundary.properties['NAME_EN']]) {
+                aggregatedData[boundary.properties['NAME_EN']] = []
+                aggregatedData[boundary.properties['NAME_EN']].push(feature)
+              } else {
+                aggregatedData[boundary.properties['NAME_EN']].push(feature)
+              }
+            }
+          })
+          aggregatedData['totalArea'] = area
+          console.log('Count: ', count)
+          fs.writeFileSync('aggregatedStats.json', JSON.stringify(aggregatedData), function (err) {
+            if (err) throw err
+            aggregatedData = {}
+          })
+          fs.writeFileSync('lastActive.json', JSON.stringify(lastActive), function (err) {
+            if (err) throw err
+            lastActive = {}
+          })
         })
-      })
-      aggregatedData['totalArea'] = area
-      fs.writeFileSync('aggregatedStats.json', JSON.stringify(aggregatedData), function (err) {
-        if (err) throw err
-        aggregatedData = {}
-      })
-      fs.writeFileSync('lastActive.json', JSON.stringify(lastActive), function (err) {
-        if (err) throw err
-        lastActive = {}
       })
     })
   } else {
