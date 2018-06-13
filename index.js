@@ -1,7 +1,6 @@
 const request = require('request')
 const turf = require('turf')
 const queue = require('d3-queue').queue
-const fs = require('fs')
 const moment = require('moment')
 const AWS = require('aws-sdk')
 const q = queue(100)
@@ -9,8 +8,7 @@ const adminBoundaries = require('./countries.json')
 var hotosmPlayGround = 'hotosm-stats-collector'
 var publicAccess = 'public-read'
 var s3BodyGeoJSON
-var s3 = new AWS.S3()
-var uploadParams = {}
+var uploadParams = {Bucket: hotosmPlayGround, Key: '', Body: '', ACL: publicAccess}
 var aggregatedData = {}
 var lastActive = {
   'type': 'FeatureCollection',
@@ -41,10 +39,8 @@ exports.handler = function index (event, context, callback) {
     if (!error && response.statusCode === 200) {
       var data = JSON.parse(body)
       s3BodyGeoJSON = JSON.stringify(data.mapResults)
-      uploadParams = {Bucket: hotosmPlayGround, Key: '', Body: '', ACL: ''}
       uploadParams.Body = s3BodyGeoJSON
       uploadParams.Key = 'allProjects.json'
-      uploadParams.ACL = publicAccess
       uploadToCloud(uploadParams)
       data.mapResults.features.forEach(function (project) {
         q.defer(function (callback) {
@@ -58,9 +54,10 @@ exports.handler = function index (event, context, callback) {
       })
       q.awaitAll(function (error, results) {
         if (error) throw error
-        aggregatedData['totalProjects'] = results.length
         var area = 0
-        results.forEach(project => {
+        var totalProjects = results.length
+        aggregatedData['totalProjects'] = totalProjects
+        results.forEach((project, projectCount) => {
           project = JSON.parse(project)
           var isInside = false
           var feature = {
@@ -110,14 +107,18 @@ exports.handler = function index (event, context, callback) {
               }
             })
             aggregatedData['totalArea'] = area
+            if (projectCount === totalProjects - 1) {
+              s3BodyGeoJSON = JSON.stringify(lastActive)
+              uploadParams.Body = s3BodyGeoJSON
+              uploadParams.Key = 'lastActive.json'
+              uploadToCloud(uploadParams)
+              s3BodyGeoJSON = JSON.stringify(aggregatedData)
+              uploadParams.Body = s3BodyGeoJSON
+              uploadParams.Key = 'aggregatedStats.json'
+              uploadToCloud(uploadParams)
+            }
           })
         })
-        s3BodyGeoJSON = JSON.stringify(lastActive)
-        uploadParams = {Bucket: hotosmPlayGround, Key: '', Body: '', ACL: ''}
-        uploadParams.Body = s3BodyGeoJSON
-        uploadParams.Key = 'lastActive.json'
-        uploadParams.ACL = publicAccess
-        uploadToCloud(uploadParams)
       })
     } else {
       console.log(' Error in fetching project list: ' + response.statusCode)
