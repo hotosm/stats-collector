@@ -18,9 +18,9 @@
   "homepage": "https://github.com/hotosm/stats-collector#readme",
   "dependencies": {
     "d3-queue": "^3.0.7",
+    "github-api": "^3.0.0",
     "moment": "^2.22.2",
     "request": "^2.87.0",
-    "serverless": "^1.27.3",
     "turf": "^3.0.14"
   }
 }

@@ -10,6 +10,7 @@ var publicAccess = 'public-read'
 var s3BodyGeoJSON
 var uploadParams = {Bucket: hotosmPlayGround, Key: '', Body: '', ACL: publicAccess}
 var aggregatedData = {}
+var GitHub = require('github-api')
 var lastActive = {
   'type': 'FeatureCollection',
   'features': []
@@ -22,6 +23,9 @@ var options = {
 }
 
 exports.handler = function index (event, context, callback) {
+  var api = new GithubAPI({
+    token: process.env['TOKEN']
+  })
   // fetch home-stats
   options.url = 'https://tasks-stage.hotosm.org/api/v1/stats/home-page'
   request(options, function (error, response, body) {
@@ -116,6 +120,18 @@ exports.handler = function index (event, context, callback) {
               uploadParams.Body = s3BodyGeoJSON
               uploadParams.Key = 'aggregatedStats.json'
               uploadToCloud(uploadParams)
+              api.setRepo('hotosm', 'hotosm-website')
+              api.setBranch('lambda')
+                .then(() => api.pushFiles('lambda generated files at ' +
+                moment().format('YYYY-MM-DD[T]HH:mm:ss'),
+                [
+                  {content: JSON.stringify(lastActive), path: 'lastActive.json'},
+                  {content: JSON.stringify(aggregatedData), path: 'aggregatedStats.json'}
+                ])
+                )
+                .then(function () {
+                  console.log('Files committed!')
+                })
             }
           })
         })
@@ -134,5 +150,91 @@ exports.handler = function index (event, context, callback) {
       }
     })
   }
+  function GithubAPI (auth) {
+    let repo
+    let filesToCommit = []
+    let currentBranch = {}
+    let newCommit = {}
+    this.gh = new GitHub(auth)
+    this.setRepo = function (userName, repoName) {
+      repo = this.gh.getRepo(userName, repoName)
+    }
+    this.setBranch = function (branchName) {
+      return repo.listBranches()
+        .then((branches) => {
+          let branchExists = branches.data
+            .find(branch => branch.name === branchName)
+          if (!branchExists) {
+            return repo.createBranch('master', branchName)
+              .then(() => {
+                currentBranch.name = branchName
+              })
+          } else {
+            currentBranch.name = branchName
+          }
+        })
+    }
+    this.pushFiles = function (message, files) {
+      return getCurrentCommitSHA()
+        .then(getCurrentTreeSHA)
+        .then(() => createFiles(files))
+        .then(createTree)
+        .then(() => createCommit(message))
+        .then(updateHead)
+        .catch((e) => {
+          console.error(e)
+        })
+    }
+    function getCurrentCommitSHA () {
+      return repo.getRef('heads/' + currentBranch.name)
+        .then((ref) => {
+          currentBranch.commitSHA = ref.data.object.sha
+        })
+    }
+    function getCurrentTreeSHA () {
+      return repo.getCommit(currentBranch.commitSHA)
+        .then((commit) => {
+          currentBranch.treeSHA = commit.data.tree.sha
+        })
+    }
+    function createFiles (files) {
+      let promises = []
+      let length = files.length
+      for (let i = 0; i < length; i++) {
+        promises.push(createFile(files[i]))
+      }
+      return Promise.all(promises)
+    }
+    function createFile (file) {
+      return repo.createBlob(file.content)
+        .then((blob) => {
+          filesToCommit.push({
+            sha: blob.data.sha,
+            path: file.path,
+            mode: '100644',
+            type: 'blob'
+          })
+        })
+    }
+    function createTree () {
+      return repo.createTree(filesToCommit, currentBranch.treeSHA)
+        .then((tree) => {
+          newCommit.treeSHA = tree.data.sha
+        })
+    }
+    function createCommit (message) {
+      return repo.commit(currentBranch.commitSHA, newCommit.treeSHA, message)
+        .then((commit) => {
+          newCommit.sha = commit.data.sha
+        })
+    }
+    function updateHead () {
+      return repo.updateHead(
+        'heads/' + currentBranch.name,
+        newCommit.sha
+      )
+    }
+  };
+
   callback(null, aggregatedData)
 }
