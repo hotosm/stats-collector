@@ -11,6 +11,7 @@ var s3BodyGeoJSON
 var uploadParams = {Bucket: hotosmPlayGround, Key: '', Body: '', ACL: publicAccess}
 var aggregatedData = {}
 var GitHub = require('github-api')
+
 var lastActive = {
   'type': 'FeatureCollection',
   'features': []
@@ -34,6 +35,15 @@ exports.handler = function index (event, context, callback) {
       aggregatedData['mappersOnline'] = data['mappersOnline']
       aggregatedData['totalTasksMapped'] = data['tasksMapped']
       aggregatedData['totalMappers'] = data['totalMappers']
+    }
+  })
+  options.url = 'https://osm-stats-production-api.azurewebsites.net/stats/missingmaps'
+  request(options, function (error, response, body) {
+    if (!error && response.statusCode === 200) {
+      var data = JSON.parse(body)
+      aggregatedData['totalEdits'] = data['edits']
+      aggregatedData['totalBuildings'] = data['buildings']
+      aggregatedData['totalRoads'] = data['roads']
     }
   })
 
