@@ -11,6 +11,9 @@ var s3BodyGeoJSON
 var uploadParams = {Bucket: hotosmPlayGround, Key: '', Body: '', ACL: publicAccess}
 var aggregatedData = {}
 var GitHub = require('github-api')
+const githubOrg = 'hotosm'
+const githubRepo = 'hotosm-website'
+const repoBranch = 'lambda'
 
 var lastActive = {
   'type': 'FeatureCollection',
@@ -35,6 +38,8 @@ exports.handler = function index (event, context, callback) {
       aggregatedData['mappersOnline'] = data['mappersOnline']
       aggregatedData['totalTasksMapped'] = data['tasksMapped']
       aggregatedData['totalMappers'] = data['totalMappers']
+    } else {
+      console.error('TM: Home page stats fetch failed!')
     }
   })
   options.url = 'https://osm-stats-production-api.azurewebsites.net/stats/missingmaps'
@@ -44,6 +49,8 @@ exports.handler = function index (event, context, callback) {
       aggregatedData['totalEdits'] = data['edits']
       aggregatedData['totalBuildings'] = data['buildings']
       aggregatedData['totalRoads'] = data['roads']
+    } else {
+      console.error('MM: Home page stats fetch failed!')
     }
   })
 
@@ -62,6 +69,8 @@ exports.handler = function index (event, context, callback) {
           request(options, function (error, response, body) {
             if (!error && response.statusCode === 200) {
               callback(null, body)
+            } else {
+              console.log('TM: Project fetch failed for: ' + project.properties.projectId)
             }
           })
         })
@@ -108,46 +117,48 @@ exports.handler = function index (event, context, callback) {
               feature.properties['buildings'] = projectStats.buildings
               feature.properties['edits'] = projectStats.edits
               feature.properties['latest'] = projectStats.latest
-            }
-            adminBoundaries.features.forEach(boundary => {
-              isInside = turf.inside(projectCentroid, boundary)
-              if (isInside) {
-                if (!aggregatedData[boundary.properties['NAME_EN']]) {
-                  aggregatedData[boundary.properties['NAME_EN']] = []
-                  aggregatedData[boundary.properties['NAME_EN']].push(feature)
-                } else {
-                  aggregatedData[boundary.properties['NAME_EN']].push(feature)
+              adminBoundaries.features.forEach(boundary => {
+                isInside = turf.inside(projectCentroid, boundary)
+                if (isInside) {
+                  if (!aggregatedData[boundary.properties['NAME_EN']]) {
+                    aggregatedData[boundary.properties['NAME_EN']] = []
+                    aggregatedData[boundary.properties['NAME_EN']].push(feature)
+                  } else {
+                    aggregatedData[boundary.properties['NAME_EN']].push(feature)
+                  }
                 }
+              })
+              aggregatedData['totalArea'] = area
+              if (projectCount === totalProjects - 1) {
+                s3BodyGeoJSON = JSON.stringify(lastActive)
+                uploadParams.Body = s3BodyGeoJSON
+                uploadParams.Key = 'lastActive.json'
+                uploadToCloud(uploadParams)
+                s3BodyGeoJSON = JSON.stringify(aggregatedData)
+                uploadParams.Body = s3BodyGeoJSON
+                uploadParams.Key = 'aggregatedStats.json'
+                uploadToCloud(uploadParams)
+                api.setRepo(githubOrg, githubRepo)
+                api.setBranch(repoBranch)
+                  .then(() => api.pushFiles('lambda generated files at ' +
+                  moment().format('YYYY-MM-DD[T]HH:mm:ss'),
+                  [
+                    {content: JSON.stringify(lastActive), path: 'lastActive.json'},
+                    {content: JSON.stringify(aggregatedData), path: 'aggregatedStats.json'}
+                  ])
+                  )
+                  .then(function () {
+                    console.log('Files committed to Github!')
+                  })
               }
-            })
-            aggregatedData['totalArea'] = area
-            if (projectCount === totalProjects - 1) {
-              s3BodyGeoJSON = JSON.stringify(lastActive)
-              uploadParams.Body = s3BodyGeoJSON
-              uploadParams.Key = 'lastActive.json'
-              uploadToCloud(uploadParams)
-              s3BodyGeoJSON = JSON.stringify(aggregatedData)
-              uploadParams.Body = s3BodyGeoJSON
-              uploadParams.Key = 'aggregatedStats.json'
-              uploadToCloud(uploadParams)
-              api.setRepo('hotosm', 'hotosm-website')
-              api.setBranch('lambda')
-                .then(() => api.pushFiles('lambda generated files at ' +
-                moment().format('YYYY-MM-DD[T]HH:mm:ss'),
-                [
-                  {content: JSON.stringify(lastActive), path: 'lastActive.json'},
-                  {content: JSON.stringify(aggregatedData), path: 'aggregatedStats.json'}
-                ])
-                )
-                .then(function () {
-                  console.log('Files committed!')
-                })
+            } else {
+              console.error('MM: Changeset stats failed!')
             }
           })
         })
       })
     } else {
-      console.log(' Error in fetching project list: ' + response.statusCode)
+      console.error('TM: Error in fetching project list: ' + response.statusCode)
     }
   })
   function uploadToCloud (params) {
