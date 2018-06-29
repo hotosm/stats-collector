@@ -92,7 +92,7 @@ exports.handler = function index (event, context, callback) {
           currentTime = moment(currentTime).utc()
           var projectTime = moment.utc(project['lastUpdated'])
           var diff = currentTime.diff(projectTime, 'hours')
-          if (diff <= 48) {
+          if (diff <= 24) {
             projectCentroid.properties['title'] = project.projectInfo['name']
             projectCentroid.properties['id'] = project.projectId
             lastActive.features.push(projectCentroid)
