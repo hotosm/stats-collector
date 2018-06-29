@@ -13,7 +13,7 @@ var aggregatedData = {}
 var GitHub = require('github-api')
 const githubOrg = 'hotosm'
 const githubRepo = 'hotosm-website'
-const repoBranch = 'lambda'
+const repoBranch = 'gh-pages'
 
 var lastActive = {
   'type': 'FeatureCollection',
@@ -22,8 +22,7 @@ var lastActive = {
 var options = {
   headers: {
     'Accept': 'application/json',
-    'Accept-Language': 'en',
-    'Authorization': 'Token ' + process.env['TM_TOKEN']
+    'Accept-Language': 'en'
   }
 }
 
@@ -32,7 +31,7 @@ exports.handler = function index (event, context, callback) {
     token: process.env['GH_TOKEN']
   })
   // fetch home-stats
-  options.url = 'https://tasks-stage.hotosm.org/api/v1/stats/home-page'
+  options.url = 'https://tasks.hotosm.org/api/v1/stats/home-page'
   request(options, function (error, response, body) {
     if (!error && response.statusCode === 200) {
       var data = JSON.parse(body)
@@ -56,7 +55,7 @@ exports.handler = function index (event, context, callback) {
   })
 
   // fetch all projects
-  options.url = 'https://tasks-stage.hotosm.org/api/v1/project/search?projectStatuses=ARCHIVED'
+  options.url = 'https://tasks.hotosm.org/api/v1/project/search'
   request(options, function (error, response, body) {
     if (!error && response.statusCode === 200) {
       var data = JSON.parse(body)
@@ -66,7 +65,7 @@ exports.handler = function index (event, context, callback) {
       uploadToCloud(uploadParams)
       data.mapResults.features.forEach(function (project) {
         q.defer(function (callback) {
-          options.url = 'https://tasks-stage.hotosm.org/api/v1/project/' + project.properties.projectId + '?as_file=false'
+          options.url = 'https://tasks.hotosm.org/api/v1/project/' + project.properties.projectId + '?as_file=false'
           request(options, function (error, response, body) {
             if (!error && response.statusCode === 200) {
               callback(null, body)
@@ -110,7 +109,7 @@ exports.handler = function index (event, context, callback) {
           var hashtag = project['changesetComment'].split(' ')[0].slice(1)
           options.url = 'https://osm-stats-production-api.azurewebsites.net/stats/' + hashtag
           request(options, function (error, response, body) {
-            if (!error) {
+            if (!error && response.statusCode === 200) {
               var projectStats = JSON.parse(body)
               feature.properties['changesets'] = projectStats.changesets
               feature.properties['mappers'] = projectStats.users
