@@ -22,13 +22,14 @@ var lastActive = {
 var options = {
   headers: {
     'Accept': 'application/json',
-    'Accept-Language': 'en'
+    'Accept-Language': 'en',
+    'Authorization': 'Token ' + process.env['TM_TOKEN']
   }
 }
 
 exports.handler = function index (event, context, callback) {
   var api = new GithubAPI({
-    token: process.env['TOKEN']
+    token: process.env['GH_TOKEN']
   })
   // fetch home-stats
   options.url = 'https://tasks-stage.hotosm.org/api/v1/stats/home-page'
@@ -55,7 +56,7 @@ exports.handler = function index (event, context, callback) {
   })
 
   // fetch all projects
-  options.url = 'https://tasks-stage.hotosm.org/api/v1/project/search'
+  options.url = 'https://tasks-stage.hotosm.org/api/v1/project/search?projectStatuses=ARCHIVED'
   request(options, function (error, response, body) {
     if (!error && response.statusCode === 200) {
       var data = JSON.parse(body)
@@ -92,7 +93,7 @@ exports.handler = function index (event, context, callback) {
           currentTime = moment(currentTime).utc()
           var projectTime = moment.utc(project['lastUpdated'])
           var diff = currentTime.diff(projectTime, 'hours')
-          if (diff <= 120) {
+          if (diff <= 48) {
             projectCentroid.properties['title'] = project.projectInfo['name']
             projectCentroid.properties['id'] = project.projectId
             lastActive.features.push(projectCentroid)
