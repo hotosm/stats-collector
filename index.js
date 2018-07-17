@@ -14,7 +14,10 @@ var GitHub = require('github-api')
 const githubOrg = 'hotosm'
 const githubRepo = 'hotosm-website'
 const repoBranch = 'gh-pages'
-
+var allProjects = {
+  'type': 'FeatureCollection',
+  'features': []
+}
 var lastActive = {
   'type': 'FeatureCollection',
   'features': []
@@ -50,7 +53,7 @@ exports.handler = function index (event, context, callback) {
       aggregatedData['totalBuildings'] = data['buildings']
       aggregatedData['totalRoads'] = data['roads']
     } else {
-      console.error('MM: Home page stats fetch failed!')
+      console.log('MM: Home page stats fetch failed!')
     }
   })
 
@@ -59,10 +62,10 @@ exports.handler = function index (event, context, callback) {
   request(options, function (error, response, body) {
     if (!error && response.statusCode === 200) {
       var data = JSON.parse(body)
-      s3BodyGeoJSON = JSON.stringify(data.mapResults)
-      uploadParams.Body = s3BodyGeoJSON
-      uploadParams.Key = 'allProjects.json'
-      uploadToCloud(uploadParams)
+      // s3BodyGeoJSON = JSON.stringify(data.mapResults)
+      // uploadParams.Body = s3BodyGeoJSON
+      // uploadParams.Key = 'allProjects.json'
+      // uploadToCloud(uploadParams)
       data.mapResults.features.forEach(function (project) {
         q.defer(function (callback) {
           options.url = 'https://tasks.hotosm.org/api/v1/project/' + project.properties.projectId + '?as_file=false'
@@ -76,12 +79,13 @@ exports.handler = function index (event, context, callback) {
         })
       })
       q.awaitAll(function (error, results) {
-        if (error) throw error
+        if (error) {}
         var area = 0
         var totalProjects = results.length
         aggregatedData['totalProjects'] = totalProjects
         results.forEach((project, projectCount) => {
           project = JSON.parse(project)
+
           var isInside = false
           var feature = {
             'type': 'Feature',
@@ -96,6 +100,9 @@ exports.handler = function index (event, context, callback) {
             projectCentroid.properties['title'] = project.projectInfo['name']
             projectCentroid.properties['id'] = project.projectId
             lastActive.features.push(projectCentroid)
+            feature.properties['lastActive'] = 'yes'
+          } else {
+            feature.properties['lastActive'] = 'no'
           }
           feature['geometry'] = project['areaOfInterest']
           var projectArea = turf.area(feature) / 1000000
@@ -117,6 +124,7 @@ exports.handler = function index (event, context, callback) {
               feature.properties['buildings'] = projectStats.buildings
               feature.properties['edits'] = projectStats.edits
               feature.properties['latest'] = projectStats.latest
+              allProjects.features.push(feature)
               adminBoundaries.features.forEach(boundary => {
                 isInside = turf.inside(projectCentroid, boundary)
                 if (isInside) {
@@ -130,6 +138,10 @@ exports.handler = function index (event, context, callback) {
               })
               aggregatedData['totalArea'] = area
               if (projectCount === totalProjects - 1) {
+                s3BodyGeoJSON = JSON.stringify(allProjects)
+                uploadParams.Body = s3BodyGeoJSON
+                uploadParams.Key = 'allProjects.json'
+                uploadToCloud(uploadParams)
                 s3BodyGeoJSON = JSON.stringify(lastActive)
                 uploadParams.Body = s3BodyGeoJSON
                 uploadParams.Key = 'lastActive.json'
@@ -152,13 +164,13 @@ exports.handler = function index (event, context, callback) {
                   })
               }
             } else {
-              console.error('MM: Changeset stats failed!')
+              console.log('MM: Changeset stats failed!')
             }
           })
         })
       })
     } else {
-      console.error('TM: Error in fetching project list: ' + response.statusCode)
+      console.log('TM: Error in fetching project list: ' + response.statusCode)
     }
   })
   function uploadToCloud (params) {
