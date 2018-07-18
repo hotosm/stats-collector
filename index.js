@@ -14,6 +14,7 @@ var GitHub = require('github-api')
 const githubOrg = 'hotosm'
 const githubRepo = 'hotosm-website'
 const repoBranch = 'gh-pages'
+var activeCountries = { 'countries': [] }
 var allProjects = {
   'type': 'FeatureCollection',
   'features': []
@@ -62,10 +63,6 @@ exports.handler = function index (event, context, callback) {
   request(options, function (error, response, body) {
     if (!error && response.statusCode === 200) {
       var data = JSON.parse(body)
-      // s3BodyGeoJSON = JSON.stringify(data.mapResults)
-      // uploadParams.Body = s3BodyGeoJSON
-      // uploadParams.Key = 'allProjects.json'
-      // uploadToCloud(uploadParams)
       data.mapResults.features.forEach(function (project) {
         q.defer(function (callback) {
           options.url = 'https://tasks.hotosm.org/api/v1/project/' + project.properties.projectId + '?as_file=false'
@@ -126,18 +123,28 @@ exports.handler = function index (event, context, callback) {
               feature.properties['latest'] = projectStats.latest
               allProjects.features.push(feature)
               adminBoundaries.features.forEach(boundary => {
+                var countryName = boundary.properties['NAME_EN']
                 isInside = turf.inside(projectCentroid, boundary)
                 if (isInside) {
-                  if (!aggregatedData[boundary.properties['NAME_EN']]) {
-                    aggregatedData[boundary.properties['NAME_EN']] = []
-                    aggregatedData[boundary.properties['NAME_EN']].push(feature)
+                  var nameLow = countryName.toLowerCase()
+                  if (diff <= 24) {
+                    if (activeCountries.countries.indexOf(nameLow) < 0) {
+                      activeCountries.countries.push(nameLow)
+                    }
+                  }
+                  if (!aggregatedData[countryName]) {
+                    aggregatedData[countryName] = []
+                    aggregatedData[countryName].push(feature)
                   } else {
-                    aggregatedData[boundary.properties['NAME_EN']].push(feature)
+                    aggregatedData[countryName].push(feature)
                   }
                 }
               })
               aggregatedData['totalArea'] = area
               if (projectCount === totalProjects - 1) {
+                uploadParams.Body = JSON.stringify(activeCountries)
+                uploadParams.Key = 'activeCountries.json'
+                uploadToCloud(uploadParams)
                 s3BodyGeoJSON = JSON.stringify(allProjects)
                 uploadParams.Body = s3BodyGeoJSON
                 uploadParams.Key = 'allProjects.json'
