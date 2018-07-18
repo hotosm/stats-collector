@@ -162,6 +162,7 @@ exports.handler = function index (event, context, callback) {
                   .then(() => api.pushFiles('lambda generated files at ' +
                   moment().format('YYYY-MM-DD[T]HH:mm:ss'),
                   [
+                    {content: JSON.stringify(activeCountries), path: 'activeCountries.json'},
                     {content: JSON.stringify(lastActive), path: 'lastActive.json'},
                     {content: JSON.stringify(aggregatedData), path: 'aggregatedStats.json'}
                   ])
