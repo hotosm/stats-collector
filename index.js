@@ -59,7 +59,7 @@ exports.handler = function index (event, context, callback) {
   })
 
   // fetch all projects
-  options.url = 'https://tasks.hotosm.org/api/v1/project/search'
+  options.url = 'https://tasks.hotosm.org/api/v1/project/search?projectStatuses=ARCHIVED'
   request(options, function (error, response, body) {
     if (!error && response.statusCode === 200) {
       var data = JSON.parse(body)
