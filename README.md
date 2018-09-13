@@ -8,4 +8,5 @@
 ## development
 
 `git clone git@github.com:hotosm/stats-collector.git`
+
 `npm install`
