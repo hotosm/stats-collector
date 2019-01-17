@@ -1,3 +1,4 @@
+const fs = require('fs')
 const request = require('request')
 const turf = require('turf')
 const queue = require('d3-queue').queue
@@ -13,12 +14,20 @@ var aggregatedData = {}
 var GitHub = require('github-api')
 const githubOrg = 'hotosm'
 const githubRepo = 'hotosm-website'
-const repoBranch = 'gh-pages'
+const repoBranch = 'project-pages-viz'
 var activeCountries = { 'countries': [] }
-var allProjects = {
-  'type': 'FeatureCollection',
-  'features': []
-}
+var projects = {}
+var campaigns = {}
+
+// var data = ""
+// var campaignsBoundaries = {
+//   'type': 'FeatureCollection',
+//   'features': []
+// }
+// var allProjects = {
+//   'type': 'FeatureCollection',
+//   'features': []
+// }
 var lastActive = {
   'type': 'FeatureCollection',
   'features': []
@@ -30,7 +39,7 @@ var options = {
   }
 }
 
-exports.handler = function index (event, context, callback) {
+// exports.handler = function index (event, context, callback) {
 var api = new GithubAPI({
   token: process.env['GH_TOKEN']
 })
@@ -39,6 +48,7 @@ options.url = 'https://tasks.hotosm.org/api/v1/stats/home-page'
 request(options, function (error, response, body) {
   if (!error && response.statusCode === 200) {
     var data = JSON.parse(body)
+    console.log('Home page stats fetch from TM suceeded')
     aggregatedData['mappersOnline'] = data['mappersOnline']
     aggregatedData['totalTasksMapped'] = data['tasksMapped']
     aggregatedData['totalMappers'] = data['totalMappers']
@@ -50,6 +60,7 @@ options.url = 'https://osm-stats-production-api.azurewebsites.net/stats/missingm
 request(options, function (error, response, body) {
   if (!error && response.statusCode === 200) {
     var data = JSON.parse(body)
+    console.log('Home page stats fetch from MM suceeded')
     aggregatedData['totalEdits'] = data['edits']
     aggregatedData['totalBuildings'] = data['buildings']
     aggregatedData['totalRoads'] = data['roads']
@@ -71,7 +82,7 @@ request(options, function (error, response, body) {
           if (!error && response.statusCode === 200) {
             callback(null, body)
           } else {
-            console.log('TM: Project fetch failed')
+            console.log('TM: Project fetch failed ' + project.properties.projectId)
           }
         })
       })
@@ -85,6 +96,7 @@ request(options, function (error, response, body) {
       results.forEach((project, projectCount) => {
         project = JSON.parse(project)
         var isInside = false
+        projects[project.projectId] = []
         var feature = {
           'type': 'Feature',
           'properties': {}
@@ -93,13 +105,20 @@ request(options, function (error, response, body) {
           'type': 'Feature',
           'properties': {}
         }
-        feature.properties['id'] = project.projectId
-        feature.properties['title'] = project.name
-        feature.properties['status'] = project.status
-        feature.properties['created'] = project['created'].slice(0, 4)
-        feature.properties['lastUpdated'] = project['lastUpdated'].slice(0, 4)
+        projects[project.projectId][0] = project.name
+        projects[project.projectId][1] = project.status
+        projects[project.projectId][2] = project.campaignTag
+        projects[project.projectId][3] = project['created'].slice(0, 4)
+        projects[project.projectId][4] = project['lastUpdated'].slice(0, 4)
+        projects[project.projectId][5] = project['aoiCentroid'].coordinates
+        
+        // feature.properties['id'] = project.projectId
+        // feature.properties['title'] = project.name
+        // feature.properties['status'] = project.status
+        // feature.properties['created'] = project['created'].slice(0, 4)
+        // feature.properties['lastUpdated'] = project['lastUpdated'].slice(0, 4)
         projectCentroid['geometry'] = project['aoiCentroid']
-        feature['geometry'] = projectCentroid.geometry
+        // feature['geometry'] = projectCentroid.geometry
         var currentTime = moment().format('YYYY-MM-DD[T]HH:mm:ss')
         currentTime = moment(currentTime).utc()
         var projectTime = moment.utc(project['lastUpdated'])
@@ -108,30 +127,35 @@ request(options, function (error, response, body) {
           projectCentroid.properties['title'] = project['name']
           projectCentroid.properties['id'] = project.projectId
           lastActive.features.push(projectCentroid)
-          feature.properties['lastActive'] = 'yes'
+          // feature.properties['lastActive'] = 'yes'
+          projects[project.projectId][6] = 'yes'
         } else {
-          feature.properties['lastActive'] = 'no'
+          // feature.properties['lastActive'] = 'no'
+          projects[project.projectId][6] = 'no'
         }
-        options.url = 'https://tasks.hotosm.org/api/v1/project/' + project.projectId + '/aoi?as_file=false'
-        request(options, function (error, response, body) {
-          if (!error && response.statusCode === 200) {
-            var aoi = JSON.parse(body)
-            var projectArea = turf.area(aoi) / 1000000
-            area = area + projectArea
-            feature.properties['area'] = projectArea
-            // var hashtag = project['changesetComment'].split(' ')[0].slice(1)
+   
             var hashtag = 'hotosm-project-' + project.projectId
             options.url = 'https://osm-stats-production-api.azurewebsites.net/stats/' + hashtag
             request(options, function (error, response, body) {
               if (!error && response.statusCode === 200) {
                 var projectStats = JSON.parse(body)
-                feature.properties['changesets'] = projectStats.changesets
-                feature.properties['mappers'] = projectStats.users
-                feature.properties['roads'] = projectStats.roads
-                feature.properties['buildings'] = projectStats.buildings
-                feature.properties['edits'] = projectStats.edits
-                feature.properties['latest'] = projectStats.latest
-                allProjects.features.push(feature)
+                projects[project.projectId][7] = projectStats.changesets
+                projects[project.projectId][8] = projectStats.users
+                projects[project.projectId][9] = projectStats.roads
+                projects[project.projectId][10] = projectStats.buildings
+                projects[project.projectId][11] = projectStats.edits
+                // projects[project.projectId][12] = projectStats.latest
+                if (project.campaignTag){
+                  if(campaigns[project.campaignTag]){
+                    campaigns[project.campaignTag].push(project.projectId)
+                  } else {
+                    campaigns[project.campaignTag] = []
+                    campaigns[project.campaignTag].push(project.projectId)
+                  }
+                }
+                
+                
+                
                 adminBoundaries.features.forEach(boundary => {
                   var countryName = boundary.properties['NAME_EN']
                   isInside = turf.inside(projectCentroid, boundary)
@@ -152,19 +176,16 @@ request(options, function (error, response, body) {
                 })
                 aggregatedData['totalArea'] = area
                 count++
+                
                 if (count === totalProjects) uploadData(count, totalProjects)
+                
               } else {
                 console.log('MM: Hashtag stats fetch failed ', project.projectId)
                 count++
                 if (count === totalProjects) uploadData(count, totalProjects)
               }
             })
-          } else {
-            console.log('TM: AOI fetch failed ', project.projectId)
-            count++
-            if (count === totalProjects) uploadData(count, totalProjects)
-          }
-        })
+         
       })
     })
   } else {
@@ -175,13 +196,17 @@ request(options, function (error, response, body) {
 function uploadData (count, totalProjects) {
   if (count === totalProjects) {
     console.log('Uploading to S3')
+    s3BodyGeoJSON = JSON.stringify(projects)
+    uploadParams.Body = s3BodyGeoJSON
+    uploadParams.Key = 'allProjects-minified.json'
+    uploadToCloud(uploadParams)
     uploadParams.Body = JSON.stringify(activeCountries)
     uploadParams.Key = 'activeCountries.json'
     uploadToCloud(uploadParams)
-    s3BodyGeoJSON = JSON.stringify(allProjects)
-    uploadParams.Body = s3BodyGeoJSON
-    uploadParams.Key = 'allProjects.json'
-    uploadToCloud(uploadParams)
+    // s3BodyGeoJSON = JSON.stringify(allProjects)
+    // uploadParams.Body = s3BodyGeoJSON
+    // uploadParams.Key = 'allProjects.json'
+    // uploadToCloud(uploadParams)
     s3BodyGeoJSON = JSON.stringify(lastActive)
     uploadParams.Body = s3BodyGeoJSON
     uploadParams.Key = 'lastActive.json'
@@ -190,20 +215,32 @@ function uploadData (count, totalProjects) {
     uploadParams.Body = s3BodyGeoJSON
     uploadParams.Key = 'aggregatedStats.json'
     uploadToCloud(uploadParams)
-    api.setRepo(githubOrg, githubRepo)
-    api.setBranch(repoBranch)
-      .then(() => api.pushFiles('lambda generated files at ' +
-      moment().format('YYYY-MM-DD[T]HH:mm:ss'),
-      [
-        {content: JSON.stringify(activeCountries), path: 'activeCountries.json'},
-        {content: JSON.stringify(allProjects), path: 'allProjects.json'},
-        {content: JSON.stringify(lastActive), path: 'lastActive.json'},
-        {content: JSON.stringify(aggregatedData), path: 'aggregatedStats.json'}
-      ])
-      )
-      .then(function () {
-        console.log('Files committed to Github!')
-      })
+    s3BodyGeoJSON = JSON.stringify(campaigns)
+    uploadParams.Body = s3BodyGeoJSON
+    uploadParams.Key = 'campaign-match.json'
+    uploadToCloud(uploadParams)
+    // s3BodyGeoJSON = JSON.stringify(campaigns)
+    // uploadParams.Body = s3BodyGeoJSON
+    // uploadParams.Key = 'campaigns-centroids.json'
+    // uploadToCloud(uploadParams)
+    // s3BodyGeoJSON = JSON.stringify(campaignsBoundaries)
+    // uploadParams.Body = s3BodyGeoJSON
+    // uploadParams.Key = 'campaigns-boundaries.json'
+    // uploadToCloud(uploadParams)
+    // api.setRepo(githubOrg, githubRepo)
+    // api.setBranch(repoBranch)
+    //   .then(() => api.pushFiles('lambda generated files at ' +
+    //   moment().format('YYYY-MM-DD[T]HH:mm:ss'),
+    //   [
+    //     {content: JSON.stringify(activeCountries), path: 'activeCountries.json'},
+    //     {content: JSON.stringify(allProjects), path: 'allProjects.json'},
+    //     {content: JSON.stringify(lastActive), path: 'lastActive.json'},
+    //     {content: JSON.stringify(aggregatedData), path: 'aggregatedStats.json'}
+    //   ])
+    //   )
+    //   .then(function () {
+    //     console.log('Files committed to Github!')
+    //   })
   }
 }
 function uploadToCloud (params) {
@@ -216,6 +253,7 @@ function uploadToCloud (params) {
     }
   })
 }
+
 function GithubAPI (auth) {
   let repo
   let filesToCommit = []
@@ -302,5 +340,5 @@ function GithubAPI (auth) {
   }
 };
 
-  callback(null, aggregatedData)
-}
+//   callback(null, aggregatedData)
+// }
