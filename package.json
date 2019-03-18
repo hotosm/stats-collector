@@ -17,6 +17,7 @@
   },
   "homepage": "https://github.com/hotosm/stats-collector#readme",
   "dependencies": {
+    "@mapbox/cloudfriend": "^2.6.0",
     "d3-queue": "^3.0.7",
     "github-api": "^3.0.0",
     "moment": "^2.22.2",
