@@ -27,8 +27,8 @@ const lambda = new cf.shortcuts.ScheduledLambda({
         's3:ListObjects'
       ],
       Resource: [
-        cf.sub('arn:aws:s3:::${S3Bucket}/',
-        'arn:aws:s3:::${S3Bucket}/bundles/${GitSha}'
+        cf.sub('arn:aws:s3:::${S3Bucket}/'),
+        cf.sub('arn:aws:s3:::${S3Bucket}/bundles/${GitSha}')
       ]
     }
   ],
