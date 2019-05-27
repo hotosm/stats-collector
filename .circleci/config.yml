@@ -91,3 +91,12 @@ workflows:
         requires:
         - build
         stack_name: "production"
+    - deploy:
+        name: staging
+        filters:
+          branches:
+            only:
+            - tester
+        requires:
+        - build
+        stack_name: "tester"
