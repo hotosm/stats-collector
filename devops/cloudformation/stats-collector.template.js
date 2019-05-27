@@ -10,8 +10,8 @@ const Parameters = {
 const lambda = new cf.shortcuts.ScheduledLambda({
   LogicalName: 'MyLambda',
   Code: {
-    S3Bucket: 'stork',
-    S3Key: cf.sub('bundles/${GitSha}.zip')
+    S3Bucket: 'stork-us-east-1',
+    S3Key: cf.sub('bundles/stats-collector/${GitSha}.zip')
   },
   Statement: [
     {
@@ -23,8 +23,8 @@ const lambda = new cf.shortcuts.ScheduledLambda({
         's3:ListObjects'
       ],
       Resource: [
-        cf.sub('arn:aws:s3:::${S3Bucket}/'),
-        cf.sub('arn:aws:s3:::${S3Bucket}/bundles/${GitSha}')
+        'arn:aws:s3:::stork-us-east-1/',
+        cf.sub('arn:aws:s3:::stork-us-east-1/bundles/${GitSha}')
       ]
     }
   ],
