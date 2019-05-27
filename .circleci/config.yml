@@ -3,7 +3,7 @@ jobs:
   build:
     working_directory: /home/circleci/app
     docker:
-    - image: circleci/node:10.0
+    - image: circleci/node:10
     steps:
     - checkout
     - setup_remote_docker
