@@ -4,17 +4,13 @@ const cf = require('@mapbox/cloudfriend');
 const Parameters = {
   GitSha: {
     Type: 'String'
-  },
-  S3Bucket: {
-    Type: 'String',
-    Description: 'S3Bucket containing stork bundles'
   }
 };
 
 const lambda = new cf.shortcuts.ScheduledLambda({
   LogicalName: 'MyLambda',
   Code: {
-    S3Bucket: cf.ref('S3Bucket'),
+    S3Bucket: 'stork',
     S3Key: cf.sub('bundles/${GitSha}.zip')
   },
   Statement: [
