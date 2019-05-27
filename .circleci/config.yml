@@ -37,7 +37,7 @@ jobs:
         type: string
     working_directory: /home/circleci/stats-collector
     docker:
-    - image: circleci/node:10.0
+    - image: circleci/node:10
     steps:
     - checkout
     - setup_remote_docker
