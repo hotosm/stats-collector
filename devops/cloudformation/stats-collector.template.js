@@ -31,4 +31,4 @@ const lambda = new cf.shortcuts.ScheduledLambda({
   ScheduleExpression: 'rate(1 hour)'
 });
 
-module.exports = cf.merge(lambda);
+module.exports = cf.merge(Parameters, lambda);
