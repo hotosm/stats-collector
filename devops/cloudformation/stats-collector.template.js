@@ -28,6 +28,7 @@ const lambda = new cf.shortcuts.ScheduledLambda({
       ]
     }
   ],
+  Timeout: 900,
   ScheduleExpression: 'rate(1 hour)'
 });
 
