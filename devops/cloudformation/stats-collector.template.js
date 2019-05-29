@@ -8,7 +8,7 @@ const Parameters = {
 };
 
 const lambda = new cf.shortcuts.ScheduledLambda({
-  LogicalName: 'MyLambda',
+  LogicalName: 'StatsCollectorLambda',
   Code: {
     S3Bucket: 'stork-us-east-1',
     S3Key: cf.sub('bundles/stats-collector/${GitSha}.zip')
