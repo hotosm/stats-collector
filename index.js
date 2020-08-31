@@ -39,7 +39,7 @@ exports.handler = function index (event, context, callback) {
     token: process.env['GH_TOKEN']
   })
   // fetch home-stats
-  options.url = 'https://tasks.hotosm.org/api/v1/stats/home-page'
+  options.url = 'https://tasking-manager-tm4-production-api.hotosm.org/api/v2/system/statistics/?abbreviated=true'
   request(options, function (error, response, body) {
     if (!error && response.statusCode === 200) {
       var data = JSON.parse(body)
@@ -65,19 +65,19 @@ exports.handler = function index (event, context, callback) {
   })
 
   // fetch all projects
-  options.url = 'https://tasks.hotosm.org/api/v1/project/search?projectStatuses=ARCHIVED'
+  options.url = 'https://tasking-manager-tm4-production-api.hotosm.org/api/v2/projects/?orderBy=priority&orderByType=ASC&page=1&createdByMe=false&mappedByMe=false&favoritedByMe=false&managedByMe=false&projectStatuses=ARCHIVED'
   request(options, function (error, response, body) {
     if (!error && response.statusCode === 200) {
       var data = JSON.parse(body)
       data.mapResults.features.forEach(function (project) {
         q.defer(function (callback) {
-          options.url = 'https://tasks.hotosm.org/api/v1/project/' + project.properties.projectId + '/summary'
+          options.url = 'https://tasking-manager-tm4-production-api.hotosm.org/api/v2/projects/' + project.properties.projectId + '/queries/summary/'
           // console.log(options.url)
           request(options, function (error, response, body) {
             if (!error && response.statusCode === 200) {
               callback(null, body)
             } else {
-              console.log('TM: Project fetch failed ' + project.properties.projectId)
+              console.log('TM: Project fetch failed ' + project.properties.projectId + ' ' + body + ' ' + response + ' ' + error)
             }
           })
         })
@@ -100,7 +100,7 @@ exports.handler = function index (event, context, callback) {
             'type': 'Feature',
             'properties': {}
           }
-          projects[project.projectId][0] = project.name
+          projects[project.projectId][0] = project.projectInfo.name
           projects[project.projectId][1] = project.status
           projects[project.projectId][2] = project.campaignTag
           projects[project.projectId][3] = project['created'].slice(0, 4)
@@ -108,12 +108,12 @@ exports.handler = function index (event, context, callback) {
           projects[project.projectId][5] = project['aoiCentroid'].coordinates
 
           feature.properties['id'] = project.projectId
-          feature.properties['title'] = project.name
+          feature.properties['title'] = project.projectInfo.name
           feature.properties['status'] = project.status
           feature.properties['created'] = project['created'].slice(0, 4)
           feature.properties['lastUpdated'] = project['lastUpdated'].slice(0, 4)
           projectCentroid['geometry'] = project['aoiCentroid']
-          feature['geometry'] = projectCentroid.geometry
+          feature['geometry'] = project['aoiCentroid']
           var currentTime = moment().format('YYYY-MM-DD[T]HH:mm:ss')
           currentTime = moment(currentTime).utc()
           var projectTime = moment.utc(project['lastUpdated'])
@@ -146,26 +146,33 @@ exports.handler = function index (event, context, callback) {
               feature.properties['buildings'] = projectStats.buildings
               feature.properties['edits'] = projectStats.edits
               feature.properties['latest'] = projectStats.latest
-              if (project.campaignTag) {
-                if (campaigns[project.campaignTag]) {
-                  campaigns[project.campaignTag].push(project.projectId)
-                } else {
-                  campaigns[project.campaignTag] = []
-                  campaigns[project.campaignTag].push(project.projectId)
-                }
+              if (project.campaigns.length > 0) {
+                project.campaigns.forEach(campaign =>  {
+                  console.log(campaign.name + " " + project.projectId)
+                  if (campaigns[campaign.name]) {
+                    console.log("campaign already present")
+                    campaigns[campaign.name].push(project.projectId)
+                  } else {
+                    console.log("creating new campaign")
+                    campaigns[campaign.name] = []
+                    campaigns[campaign.name].push(project.projectId)
+                  }
+                });
+                
               }
               allProjects.features.push(feature)
-              options.url = 'https://tasks.hotosm.org/api/v1/project/' + project.projectId + '/aoi?as_file=false'
+              options.url = 'https://tasking-manager-tm4-production-api.hotosm.org/api/v2/projects/' + project.projectId + '/queries/aoi?as_file=false'
               request(options, function (error, response, body) {
                 if (!error && response.statusCode === 200) {
                   var aoi = JSON.parse(body)
                   var projectArea = turf.area(aoi) / 1000000
-                  feature.geometry = aoi
+                  area += projectArea
+                  // feature.geometry = aoi
                   feature.properties['area'] = projectArea
-                  s3BodyGeoJSON = JSON.stringify(feature)
-                  uploadParams.Body = s3BodyGeoJSON
-                  uploadParams.Key = project.projectId + '-aoi.json'
-                  uploadToCloud(uploadParams)
+                  // s3BodyGeoJSON = JSON.stringify(feature)
+                  // uploadParams.Body = s3BodyGeoJSON
+                  // uploadParams.Key = project.projectId + '-aoi.json'
+                  // uploadToCloud(uploadParams)
                 } else {
                   console.log('AOI fetch failed: ', project.projectId)
                 }
@@ -228,6 +235,7 @@ exports.handler = function index (event, context, callback) {
       uploadParams.Key = 'aggregatedStats.json'
       uploadToCloud(uploadParams)
       s3BodyGeoJSON = JSON.stringify(campaigns)
+      console.log("campaigns: ", s3BodyGeoJSON)
       uploadParams.Body = s3BodyGeoJSON
       uploadParams.Key = 'campaign-match.json'
       uploadToCloud(uploadParams)
